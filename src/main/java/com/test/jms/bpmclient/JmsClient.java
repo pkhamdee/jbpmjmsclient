@@ -13,9 +13,9 @@ import javax.jms.*;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import java.util.UUID;
+import javax.jms.Message;
 
-public class JmsClient {
-
+public class JmsClient  {
     private static final Logger logger = LoggerFactory.getLogger(JmsClient.class);
 
     // kie server users, admin rules is needed by jms provider
@@ -25,6 +25,7 @@ public class JmsClient {
     private static final String PROVIDER_URL = "http-remoting://127.0.0.1:8080";
     private static final String JMS_CONNECTION_FACTORY = "jms/RemoteConnectionFactory";
     private static final String JMS_QUEUE_KIE_SESSION = "jms/queue/KIE.SESSION";
+    private static final String JMS_QUEUE_KIE_RESPONSE = "jms/queue/KIE.RESPONSE";
 
     private static final String DEPLOYMENT_ID = "com.test:bpmtest:1.3-SNAPSHOT";
     private static final String PROCESS_ID = "testproject.hello-process";
@@ -44,6 +45,41 @@ public class JmsClient {
 
         sendJmsCommands(DEPLOYMENT_ID, BPM_USER, req, conn, reqQueue, BPM_USER, BPM_PASSWORD, 5);
     }
+
+    @Test
+    public void getStartProcessResponse() throws NamingException, Exception {
+
+        InitialContext ctx = initContext();
+
+        logger.info("create connection factory... "+JMS_CONNECTION_FACTORY);
+        ConnectionFactory conn = (ConnectionFactory) ctx.lookup(JMS_CONNECTION_FACTORY);
+
+        logger.info("look up queue..." + JMS_QUEUE_KIE_RESPONSE);
+        Queue responseQueue = (Queue) ctx.lookup(JMS_QUEUE_KIE_RESPONSE);
+
+        Connection connection = conn.createConnection(BPM_USER, BPM_PASSWORD);
+
+        Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+
+        MessageConsumer consumer = session.createConsumer(responseQueue);
+        connection.start();
+
+        logger.info("Received message with content");
+        Message msg = consumer.receiveNoWait();
+        while(msg != null){
+            TextMessage message = (TextMessage)msg;
+            logger.info(message.getText());
+
+            msg = consumer.receiveNoWait();
+        }
+
+        consumer.close();
+        session.close();
+        connection.close();
+    }
+
+
+
 
     private static void sendJmsCommands(String deploymentId, String user,
                                  JaxbCommandsRequest commandsRequest, ConnectionFactory connectionFactory,
@@ -68,6 +104,9 @@ public class JmsClient {
 
         System.out.println("Request to be send: " + serializationProvider.serialize(commandsRequest));
         producer.send(msg);
+
+        producer.close();
+        session.close();
         connection.close();
     }
 
